@@ -3,7 +3,7 @@ import { ref, computed, onUnmounted, watch } from 'vue'
 import { RouterLink } from 'vue-router'
 import Layout from '@/components/Layout.vue'
 import { useImageFile } from '@/composables/useImageFile'
-import { ID_PHOTO_PRESETS, ID_PHOTO_BG_COLORS, composeIdPhoto, canvasToJpegBlob } from '@/utils/idPhoto'
+import { ID_PHOTO_PRESETS, ID_PHOTO_BG_COLORS, composeIdPhoto, canvasToJpegBlob, removeTextByOcr } from '@/utils/idPhoto'
 
 const { file, previewUrl, originalInfo, dragOver, onFileChange, onDrop, onDragOver, onDragLeave, reset } = useImageFile()
 
@@ -59,38 +59,87 @@ async function process() {
   if (!file.value) return
   processing.value = true
   error.value = ''
-  progressText.value = '加载 AI 模型...'
-  progressPct.value = 0
+  progressText.value = '上传图片...'
+  progressPct.value = 10
   if (resultUrl.value) URL.revokeObjectURL(resultUrl.value)
   resultUrl.value = ''
   resultInfo.value = null
   try {
-    const { removeBackground } = await import('@imgly/background-removal')
-    const noBgBlob = await removeBackground(file.value, {
-      progress: (key, current, total) => {
-        if (key.startsWith('fetch:')) {
-          if (total > 0) {
-            progressText.value = `下载模型 (${(current / 1024 / 1024).toFixed(1)} / ${(total / 1024 / 1024).toFixed(1)} MB)`
-            progressPct.value = (current / total) * 70
-          } else {
-            progressText.value = '准备模型...'
-            progressPct.value = 5
-          }
-        } else if (key.startsWith('compute:')) {
-          progressText.value = 'AI 推理中...'
-          progressPct.value = 70 + (current / Math.max(total, 1)) * 25
+    // 调用后端 AI 服务 (rembg 服务端推理), 直接发原始图片字节
+    progressText.value = 'AI 推理中 (服务端)...'
+    progressPct.value = 30
+
+    // 把 File 转 ArrayBuffer, 避免某些浏览器 File body 编码怪问题
+    let payload = await file.value.arrayBuffer()
+    let mime = file.value.type
+
+    // 尝试在浏览器里把 HEIC 转 JPEG (Safari 支持, Chrome 新版支持)
+    // 失败就 fallback: 原始 HEIC 字节直接发, 服务端用 pillow-heif 解
+    if (mime === 'image/heic' || mime === 'image/heif' ||
+        (mime === '' && file.value.name.toLowerCase().endsWith('.heic'))) {
+      try {
+        const url = URL.createObjectURL(file.value)
+        const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+          const i = new Image()
+          i.onload = () => resolve(i)
+          i.onerror = () => reject(new Error('浏览器不支持 HEIC 解码'))
+          i.src = url
+        })
+        const canvas = document.createElement('canvas')
+        canvas.width = img.naturalWidth
+        canvas.height = img.naturalHeight
+        canvas.getContext('2d')!.drawImage(img, 0, 0)
+        const blob = await new Promise<Blob>((resolve) =>
+          canvas.toBlob((b) => resolve(b!), 'image/jpeg', 0.95)
+        )
+        URL.revokeObjectURL(url)
+        if (blob.size > 0) {
+          payload = await blob.arrayBuffer()
+          mime = 'image/jpeg'
+          console.log('前端 HEIC → JPEG 转码成功')
         }
+      } catch (e) {
+        // fallback: 维持原 HEIC bytes, 让服务端 pillow-heif 解
+        console.warn('前端无法转 HEIC, 交给服务端:', e)
       }
+    }
+
+    if (payload.byteLength === 0) {
+      throw new Error('文件为空, 请重新选择')
+    }
+
+    const res = await fetch('/api/remove-bg', {
+      method: 'POST',
+      body: payload,
+      headers: { 'Content-Type': mime || 'application/octet-stream' }
     })
-    progressText.value = '合成证件照...'
-    progressPct.value = 90
+    if (!res.ok) {
+      const txt = await res.text().catch(() => '')
+      throw new Error(`HTTP ${res.status} ${txt.slice(0, 300)}`)
+    }
+    const noBgBlob = await res.blob()
+    progressText.value = 'OCR 去除水印...'
+    progressPct.value = 70
 
     const personImg = await blobToImage(noBgBlob)
-    const personCanvas = document.createElement('canvas')
+    let personCanvas = document.createElement('canvas')
     personCanvas.width = personImg.naturalWidth
     personCanvas.height = personImg.naturalHeight
     const pctx = personCanvas.getContext('2d')!
     pctx.drawImage(personImg, 0, 0)
+
+    // OCR 识别水印并涂透明
+    try {
+      personCanvas = await removeTextByOcr(personCanvas, (pct, status) => {
+        progressText.value = `OCR 去除水印 (${status} ${pct}%)`
+        progressPct.value = 70 + Math.round(pct * 0.1) // 70% ~ 80%
+      })
+    } catch (e) {
+      console.warn('OCR 步骤失败, 继续合成:', e)
+    }
+
+    progressText.value = '合成证件照...'
+    progressPct.value = 85
 
     const result = await composeIdPhoto(
       personCanvas,

@@ -26,5 +26,22 @@ pnpm-debug.log*
 # Vite cache
 .vite/
 
+# AI 推理模型 / 资源 (从脚本下载, 不入库)
+# - rembg 模型: 由 server/install.sh 部署到 /var/lib/rembg/.model/
+# - tesseract 资源: 由 scripts/download-tesseract-assets.mjs 拉到 public/tesseract/
+public/models/*
+public/tesseract/*
+server/*.onnx
+
 # TypeScript build info
 *.tsbuildinfo
+
+# 临时构建产物 (源文件是 vite.config.ts, 不要 commit .js)
+vite.config.js
+vite.config.d.ts
+tsconfig.tsbuildinfo
+
+# 环境变量
+.env
+.env.local
+.env.*.local

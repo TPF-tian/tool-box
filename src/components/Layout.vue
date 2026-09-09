@@ -12,6 +12,7 @@ function toggleTheme() {
 
 const navLinks = [
   { to: '/image', label: '图像处理' },
+  { to: '/doc', label: '文档工具' },
   { to: '/json', label: 'JSON 工具' },
   { to: '/ip', label: 'IP 解析' }
 ]
@@ -32,7 +33,7 @@ const navLinks = [
               <rect x="14" y="14" width="7" height="7" rx="1.5" />
             </svg>
           </span>
-          ToolBox
+          Kevin 工具箱
         </RouterLink>
         <nav class="hidden gap-1 md:flex">
           <RouterLink
@@ -76,6 +77,24 @@ const navLinks = [
     </main>
     <footer class="border-t border-slate-200 py-6 text-center text-xs text-slate-500 dark:border-slate-800">
       <p>ToolBox · 纯前端工具集 · 数据不上传</p>
+      <p class="mt-2">
+        开源协议 <a
+          href="https://github.com/TPF-tian/tool-box/blob/main/LICENSE"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="hover:text-slate-700 dark:hover:text-slate-300"
+        >MIT</a>
+        · 欢迎 <a
+          href="https://github.com/TPF-tian/tool-box"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="hover:text-slate-700 dark:hover:text-slate-300"
+        >Star & Issue</a>
+      </p>
+      <!--
+        部署到国内服务器需要在 footer 加 ICP 备案号, 把下面这一行取消注释并填你自己的备案号.
+        <p class="mt-1"><a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer">你的备案号</a></p>
+      -->
     </footer>
   </div>
 </template>

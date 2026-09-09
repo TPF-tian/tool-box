@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch, onUnmounted } from 'vue'
+import { ref, computed, onUnmounted } from 'vue'
 import { RouterLink } from 'vue-router'
 import Layout from '@/components/Layout.vue'
 import { getImageInfo } from '@/utils/imageTools'
@@ -22,38 +22,9 @@ const progressPct = ref(0)
 const progressText = ref('')
 const resultUrl = ref('')
 const resultSize = ref(0)
-const resultExt = ref<'gif' | 'webm' | 'mp4'>('gif')
-const resultFormatLabel = ref('GIF')
 const dragOver = ref(false)
-const videoFormatId = ref('webm-vp9')
 
 const MAX_DIM = 1920
-
-type VideoFormat = {
-  id: string
-  label: string
-  desc: string
-  mimeType: string
-  ext: 'webm' | 'mp4'
-}
-
-const videoFormatOptions: VideoFormat[] = [
-  { id: 'webm-vp9', label: 'WebM · VP9', desc: '更高压缩率', mimeType: 'video/webm;codecs=vp9', ext: 'webm' },
-  { id: 'webm-vp8', label: 'WebM · VP8', desc: '默认, 兼容性最好', mimeType: 'video/webm;codecs=vp8', ext: 'webm' },
-  { id: 'mp4-h264', label: 'MP4 · H.264', desc: 'Safari / Chrome 116+', mimeType: 'video/mp4;codecs=avc1.42E01F', ext: 'mp4' }
-]
-
-const supportedVideoFormats = computed(() => {
-  if (typeof MediaRecorder === 'undefined') return []
-  return videoFormatOptions.filter((f) => MediaRecorder.isTypeSupported(f.mimeType))
-})
-
-// 如果当前选中的格式不被支持, 自动切到第一个支持的
-watch(supportedVideoFormats, (formats) => {
-  if (formats.length > 0 && !formats.find((f) => f.id === videoFormatId.value)) {
-    videoFormatId.value = formats[0].id
-  }
-}, { immediate: true })
 
 async function onFiles(files: FileList | File[]) {
   const list = Array.from(files).filter((f) => f.type.startsWith('image/'))
@@ -217,8 +188,6 @@ async function generateGif() {
       gif.on('finished', (blob: Blob) => {
         resultUrl.value = URL.createObjectURL(blob)
         resultSize.value = blob.size
-        resultExt.value = 'gif'
-        resultFormatLabel.value = 'GIF'
         progressPct.value = 100
         progressText.value = '完成'
         resolve()
@@ -236,85 +205,11 @@ async function generateGif() {
   }
 }
 
-async function generateVideo() {
-  if (frames.value.length === 0) return
-  if (typeof MediaRecorder === 'undefined') {
-    error.value = '当前浏览器不支持 MediaRecorder, 无法生成视频'
-    return
-  }
-  const format = supportedVideoFormats.value.find((f) => f.id === videoFormatId.value)
-  if (!format) {
-    error.value = '当前浏览器不支持所选视频格式'
-    return
-  }
-  processing.value = true
-  error.value = ''
-  progressPct.value = 0
-  progressText.value = '准备视频编码器...'
-  if (resultUrl.value) URL.revokeObjectURL(resultUrl.value)
-  resultUrl.value = ''
-  try {
-    const { w, h } = getCanvasSize()
-    const canvas = document.createElement('canvas')
-    canvas.width = w
-    canvas.height = h
-    const ctx = canvas.getContext('2d')!
-    // 预加载所有图片
-    const images: HTMLImageElement[] = []
-    for (let i = 0; i < frames.value.length; i++) {
-      images.push(await loadImage(frames.value[i].url))
-      progressText.value = `加载图片 ${i + 1} / ${frames.value.length}`
-    }
-    const stream = canvas.captureStream(0)
-    const track = stream.getVideoTracks()[0] as CanvasCaptureMediaStreamTrack
-    const recorder = new MediaRecorder(stream, { mimeType: format.mimeType })
-    const chunks: Blob[] = []
-    recorder.ondataavailable = (e) => {
-      if (e.data && e.data.size > 0) chunks.push(e.data)
-    }
-    await new Promise<void>((resolve, reject) => {
-      recorder.onstop = () => {
-        const blob = new Blob(chunks, { type: format.mimeType })
-        resultUrl.value = URL.createObjectURL(blob)
-        resultSize.value = blob.size
-        resultExt.value = format.ext
-        resultFormatLabel.value = format.label
-        progressPct.value = 100
-        progressText.value = '完成'
-        resolve()
-      }
-      recorder.onerror = () => reject(new Error('录制出错'))
-      recorder.start()
-      let i = 0
-      const drawNext = () => {
-        if (i >= images.length) {
-          // 最后一帧多停留一个 delay
-          const lastDelay = frames.value[frames.value.length - 1].delay / videoSpeed.value
-          setTimeout(() => recorder.stop(), lastDelay)
-          return
-        }
-        drawFrame(ctx, images[i], w, h)
-        if (track.requestFrame) track.requestFrame()
-        progressText.value = `录制 ${i + 1} / ${images.length}`
-        progressPct.value = ((i + 1) / images.length) * 100
-        const curDelay = frames.value[i].delay / videoSpeed.value
-        i++
-        setTimeout(drawNext, curDelay)
-      }
-      drawNext()
-    })
-  } catch (e) {
-    error.value = '生成视频失败: ' + (e as Error).message
-  } finally {
-    processing.value = false
-  }
-}
-
 function download() {
   if (!resultUrl.value) return
   const a = document.createElement('a')
   a.href = resultUrl.value
-  a.download = `toolbox-${Date.now()}.${resultExt.value}`
+  a.download = `toolbox-${Date.now()}.gif`
   document.body.appendChild(a)
   a.click()
   document.body.removeChild(a)
@@ -338,8 +233,8 @@ onUnmounted(() => {
         </svg>
         返回图像工具
       </RouterLink>
-      <h1 class="mb-2 text-3xl font-bold text-slate-900 dark:text-white">图片转 GIF / 视频</h1>
-      <p class="mb-8 text-slate-500 dark:text-slate-400">多张图片按顺序合成动画, 输出 GIF 或 WebM 视频</p>
+      <h1 class="mb-2 text-3xl font-bold text-slate-900 dark:text-white">图片转 GIF</h1>
+      <p class="mb-8 text-slate-500 dark:text-slate-400">多张图片按顺序合成 GIF 动画, 浏览器内完成, 不上传服务器</p>
 
       <!-- 上传区 (无帧时) -->
       <div
@@ -432,40 +327,13 @@ onUnmounted(() => {
           <!-- 生成 -->
           <div class="card">
             <h3 class="mb-3 font-semibold text-slate-900 dark:text-white">生成</h3>
-            <div class="space-y-3">
-              <button class="btn-primary w-full" :disabled="processing" @click="generateGif">
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-1">
-                  <rect width="18" height="18" x="3" y="3" rx="2" />
-                  <path d="M9 9h6v6H9z" />
-                </svg>
-                生成 GIF
-              </button>
-              <div>
-                <div class="mb-1.5 text-xs text-slate-500">视频格式</div>
-                <div v-if="supportedVideoFormats.length === 0" class="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700 dark:border-rose-900 dark:bg-rose-950 dark:text-rose-300">
-                  当前浏览器不支持任何视频格式
-                </div>
-                <div v-else class="grid grid-cols-1 gap-1.5 sm:grid-cols-3">
-                  <button
-                    v-for="f in supportedVideoFormats"
-                    :key="f.id"
-                    class="rounded-lg border px-3 py-1.5 text-left text-xs transition-colors"
-                    :class="videoFormatId === f.id ? 'border-brand-500 bg-brand-50 text-brand-700 dark:bg-brand-950 dark:text-brand-300' : 'border-slate-200 text-slate-700 hover:border-slate-300 dark:border-slate-700 dark:text-slate-300 dark:hover:border-slate-600'"
-                    @click="videoFormatId = f.id"
-                  >
-                    <div class="font-medium">{{ f.label }}</div>
-                    <div class="text-[10px] text-slate-500">{{ f.desc }}</div>
-                  </button>
-                </div>
-                <button class="btn-secondary mt-2 w-full" :disabled="processing" @click="generateVideo">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-1">
-                    <path d="m22 8-6 4 6 4V8Z" />
-                    <rect width="14" height="12" x="2" y="6" rx="2" ry="2" />
-                  </svg>
-                  生成视频
-                </button>
-              </div>
-            </div>
+            <button class="btn-primary w-full" :disabled="processing" @click="generateGif">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-1">
+                <rect width="18" height="18" x="3" y="3" rx="2" />
+                <path d="M9 9h6v6H9z" />
+              </svg>
+              生成 GIF
+            </button>
             <div v-if="processing" class="mt-3">
               <div class="mb-1 text-xs text-slate-500">{{ progressText }} {{ progressPct.toFixed(0) }}%</div>
               <div class="h-1.5 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
@@ -486,14 +354,13 @@ onUnmounted(() => {
               <h3 class="font-semibold text-slate-900 dark:text-white">
                 结果
                 <span class="ml-2 text-xs font-normal text-slate-500">
-                  {{ resultFormatLabel }} · {{ fmt(resultSize) }} · {{ frames.length }} 帧 · {{ videoSpeed }}x · {{ fmtMs(totalDurationMs) }}
+                  GIF · {{ fmt(resultSize) }} · {{ frames.length }} 帧 · {{ videoSpeed }}x · {{ fmtMs(totalDurationMs) }}
                 </span>
               </h3>
               <button class="btn-secondary text-sm" @click="download">下载</button>
             </div>
             <div class="rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-800">
-              <img v-if="resultExt === 'gif'" :src="resultUrl" class="mx-auto block max-h-96 rounded object-contain" alt="GIF 结果" />
-              <video v-else :src="resultUrl" controls loop class="mx-auto block max-h-96 rounded object-contain"></video>
+              <img :src="resultUrl" class="mx-auto block max-h-96 rounded object-contain" alt="GIF 结果" />
             </div>
           </div>
         </div>
@@ -507,7 +374,6 @@ onUnmounted(() => {
               <li>· 其他帧按比例居中, 空白填白底</li>
               <li>· 帧顺序就是动画播放顺序</li>
               <li>· 可单独改每帧延迟, 也可"应用全部"</li>
-              <li>· GIF 适合嵌入, 视频文件更小</li>
             </ul>
           </div>
           <div class="card mt-4">
@@ -515,11 +381,7 @@ onUnmounted(() => {
             <div class="space-y-2 text-sm text-slate-600 dark:text-slate-400">
               <div>
                 <div class="font-medium text-slate-700 dark:text-slate-300">GIF</div>
-                <div class="text-xs">浏览器/IM 通吃, 体积大, 颜色限制 256</div>
-              </div>
-              <div>
-                <div class="font-medium text-slate-700 dark:text-slate-300">WebM (VP8/VP9)</div>
-                <div class="text-xs">现代浏览器原生支持, 体积小, 颜色无损</div>
+                <div class="text-xs">浏览器/IM 通吃, 体积偏大, 颜色限制 256 色</div>
               </div>
             </div>
           </div>

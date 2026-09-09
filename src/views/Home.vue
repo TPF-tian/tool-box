@@ -6,13 +6,20 @@ const tools = [
   {
     to: '/image',
     title: '图像工具',
-    desc: '压缩、尺寸、水印、九宫格、Base64、GIF 拆帧，6 个细分工具',
+    desc: '压缩、尺寸、水印、九宫格、Base64、GIF 拆帧、证件照、转 GIF/视频，9 个细分工具',
     icon: 'image' as const,
-    tag: '6 个工具'
+    tag: '9 个工具'
+  },
+  {
+    to: '/doc',
+    title: '文档工具',
+    desc: 'Markdown 编辑器、MD↔HTML、文本处理、PDF 工具、Word 文档',
+    icon: 'doc' as const,
+    tag: '新功能'
   },
   {
     to: '/json',
-    title: 'JSON 格式化与对比',
+    title: 'JSON 工具',
     desc: '美化、字段级差异对比 (git 风格行号)、树形视图可编辑删除',
     icon: 'json' as const,
     tag: '离线'
@@ -39,7 +46,7 @@ const tools = [
           顺手好用的小工具集
         </h1>
         <p class="mx-auto max-w-2xl text-base text-slate-500 md:text-lg dark:text-slate-400">
-          图像处理、JSON 格式化与对比、IP 解析 — 所有计算在浏览器内完成，文件不经过服务器。
+          图像处理、文档工具、JSON 工具、IP 解析 — 所有计算在浏览器内完成，文件不经过服务器。
         </p>
       </div>
       <div class="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">

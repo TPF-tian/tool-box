@@ -1,3 +1,5 @@
+import { createWorker, type Worker as TesseractWorker } from 'tesseract.js'
+
 export type IdPhotoPreset = {
   id: string
   name: string
@@ -71,17 +73,20 @@ export async function composeIdPhoto(
   const bounds = findNonTransparentBounds(personCanvas)
   if (!bounds) throw new Error('未检测到人物')
 
-  // 留 8% 顶部边距, 让人物头靠上
-  const topMargin = 0.08
-  const maxH = targetH * (1 - topMargin - 0.04) // 顶部 8% + 底部 4% 留白
+  // 整体人像占画布宽度 96%, 高度最多 96% (留 2% 底边距)
   const maxW = targetW * 0.96
+  const maxH = targetH * 0.96
+  const bottomMargin = 0.02
 
   // 缩放: 同时受宽高约束
   const scale = Math.min(maxH / bounds.h, maxW / bounds.w)
   const drawW = bounds.w * scale
   const drawH = bounds.h * scale
   const offsetX = (targetW - drawW) / 2
-  const offsetY = topMargin * targetH
+
+  // 整体人像底部贴近画布底部 (留 2% 底边距)
+  // 横构图时 drawH 较小, 整体贴底后头部自然在画面中上, 不会再留大片白
+  const offsetY = Math.max(0, targetH - drawH - bottomMargin * targetH)
 
   const result = document.createElement('canvas')
   result.width = targetW
@@ -116,4 +121,112 @@ export function canvasToJpegBlob(canvas: HTMLCanvasElement, quality = 0.95): Pro
       quality
     )
   })
+}
+
+// ---------- OCR 水印去除 ----------
+
+// 共享 worker (首次加载 ~10MB 总资源, 浏览器缓存后秒开)
+let _ocrWorker: TesseractWorker | null = null
+let _ocrInitPromise: Promise<TesseractWorker> | null = null
+
+async function getOcrWorker(
+  onProgress?: (pct: number, status: string) => void
+): Promise<TesseractWorker> {
+  if (_ocrWorker) return _ocrWorker
+  if (_ocrInitPromise) return _ocrInitPromise
+
+  _ocrInitPromise = (async () => {
+    // 走自己服务器资源, 不走 jsDelivr (国内访问 jsDelivr 慢)
+    // 资源由 scripts/download-tesseract-assets.mjs 放到 public/tesseract/
+    const worker = await createWorker(['chi_sim', 'eng'], 1, {
+      workerPath: '/tesseract/worker.min.js',
+      corePath: '/tesseract/core/tesseract-core-simd-lstm.wasm.js',
+      langPath: '/tesseract/lang-data',
+      gzip: true,
+      logger: (m: { status: string; progress: number }) => {
+        if (onProgress && typeof m.progress === 'number') {
+          onProgress(Math.round(m.progress * 100), m.status)
+        }
+      }
+    })
+    _ocrWorker = worker
+    return worker
+  })()
+
+  return _ocrInitPromise
+}
+
+/**
+ * 跑 OCR 识别 canvas 上的文字, 把识别出的文字区域涂透明
+ * 用于去除照片上的水印/字样
+ * 失败/超时/无文字 时返回原 canvas
+ */
+export async function removeTextByOcr(
+  canvas: HTMLCanvasElement,
+  onProgress?: (pct: number, status: string) => void
+): Promise<HTMLCanvasElement> {
+  type TWord = { text: string; confidence: number; bbox: { x0: number; y0: number; x1: number; y1: number } }
+  let words: TWord[] = []
+  try {
+    const worker = await getOcrWorker(onProgress)
+    const { data } = await worker.recognize(canvas)
+    // v7 结构: data.blocks -> paragraphs -> lines -> words
+    const collect = (blocks: any[] | null | undefined): TWord[] => {
+      const out: TWord[] = []
+      if (!blocks) return out
+      for (const b of blocks) {
+        for (const p of b.paragraphs || []) {
+          for (const l of p.lines || []) {
+            for (const w of l.words || []) {
+              if (w.text && w.text.trim().length > 0 && w.bbox) {
+                out.push({
+                  text: w.text,
+                  confidence: w.confidence,
+                  bbox: w.bbox
+                })
+              }
+            }
+          }
+        }
+      }
+      return out
+    }
+    words = collect(data.blocks as any)
+  } catch (e) {
+    console.warn('OCR 失败, 跳过水印去除:', e)
+    return canvas
+  }
+
+  if (words.length === 0) return canvas
+
+  // 过滤: 置信度太低的不涂 (避免误伤)
+  const valid = words.filter((w) => w.confidence >= 50)
+  if (valid.length === 0) return canvas
+
+  // 复制 canvas, 涂掉文字区域
+  const out = document.createElement('canvas')
+  out.width = canvas.width
+  out.height = canvas.height
+  const ctx = out.getContext('2d')!
+  ctx.drawImage(canvas, 0, 0)
+
+  for (const w of valid) {
+    const { x0, y0, x1, y1 } = w.bbox
+    const w0 = Math.max(0, x0)
+    const y0c = Math.max(0, y0)
+    const w1 = Math.min(canvas.width, x1)
+    const h1 = Math.min(canvas.height, y1)
+    if (w1 > w0 && h1 > y0c) {
+      // 略扩展一点, 确保文字边缘也涂掉
+      const pad = 2
+      ctx.clearRect(
+        Math.max(0, w0 - pad),
+        Math.max(0, y0c - pad),
+        w1 - w0 + pad * 2,
+        h1 - y0c + pad * 2
+      )
+    }
+  }
+
+  return out
 }

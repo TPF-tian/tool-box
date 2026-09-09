@@ -1,30 +1,64 @@
 {
-  "name": "tool-site",
-  "private": true,
+  "name": "tool-box",
   "version": "0.1.0",
+  "private": false,
+  "description": "纯前端的浏览器内工具集：图像处理、文档工具、JSON 工具、IP 解析。所有计算在本地完成，文件不上传服务器。",
   "type": "module",
+  "license": "MIT",
+  "author": "Kevin Tian",
+  "homepage": "https://kevintian.cn",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/TPF-tian/tool-box.git"
+  },
+  "bugs": {
+    "url": "https://github.com/TPF-tian/tool-box/issues"
+  },
+  "keywords": [
+    "vue",
+    "vite",
+    "typescript",
+    "image-processing",
+    "pdf",
+    "json",
+    "tools",
+    "browser",
+    "offline"
+  ],
   "scripts": {
     "dev": "vite",
     "build": "vue-tsc -b && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "typecheck": "vue-tsc --noEmit",
+    "download:tesseract": "node scripts/download-tesseract-assets.mjs"
   },
   "dependencies": {
-    "vue": "^3.5.13",
-    "vue-router": "^4.5.0",
     "diff": "^7.0.0",
+    "docx": "^9.7.1",
+    "gif.js": "^0.2.0",
     "gifuct-js": "^2.1.2",
+    "highlight.js": "^11.12.0",
     "jszip": "^3.10.1",
-    "@imgly/background-removal": "^1.5.6",
-    "gif.js": "^0.2.0"
+    "mammoth": "^1.12.2",
+    "markdown-it": "^15.0.1",
+    "pdf-lib": "^1.17.1",
+    "pdfjs-dist": "^6.2.108",
+    "tesseract.js": "^7.0.0",
+    "vue": "^3.5.13",
+    "vue-router": "^4.5.0"
   },
   "devDependencies": {
-    "@vitejs/plugin-vue": "^5.2.1",
     "@types/diff": "^7.0.0",
+    "@types/markdown-it": "^14.2.0",
+    "@vitejs/plugin-vue": "^5.2.1",
     "autoprefixer": "^10.4.20",
     "postcss": "^8.4.49",
     "tailwindcss": "^3.4.17",
     "typescript": "~5.7.3",
     "vite": "^6.0.7",
     "vue-tsc": "^2.2.0"
+  },
+  "engines": {
+    "node": ">=20"
   }
 }

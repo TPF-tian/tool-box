@@ -1,0 +1,6 @@
+# https://docs.github.com/articles/configuring-issue-templates-for-your-repository/
+blank_issues_enabled: false
+contact_links:
+  - name: 💬 提问 / 讨论
+    url: https://github.com/TPF-tian/tool-box/discussions
+    about: 不确定是不是 Bug 的问题先在这里问

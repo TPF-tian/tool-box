@@ -50,9 +50,16 @@ const tools = [
   },
   {
     to: '/image/to-gif',
-    title: '图片转 GIF / 视频',
-    desc: '多张图片按顺序合成动画, 输出 GIF 或 WebM 视频',
+    title: '图片转 GIF',
+    desc: '多张图片按顺序合成 GIF 动画, 浏览器内完成',
     icon: 'gif2'
+  },
+  {
+    to: '/image/to-video',
+    title: '图片 / GIF 转视频',
+    desc: '多张图片按顺序合成视频 (每张可独立调时长), 或 GIF 拆帧导出 WebM/MP4',
+    tag: '新功能',
+    icon: 'tovideo'
   }
 ]
 </script>
@@ -130,6 +137,11 @@ const tools = [
               <rect x="2" y="6" width="14" height="12" rx="2" />
               <path d="m22 8-6 4 6 4V8Z" />
               <path d="M5 6V4M9 6V4M13 6V4" />
+            </svg>
+            <svg v-else-if="t.icon === 'tovideo'" xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="2" y="4" width="14" height="12" rx="2" />
+              <path d="m22 6-6 4 6 4V6Z" />
+              <path d="M7 16l-2 4M11 16l-1 4M15 16l1 4" />
             </svg>
             <svg v-else xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <circle cx="12" cy="8" r="4" />
