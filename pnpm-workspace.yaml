@@ -1,3 +1,7 @@
+packages:
+  - .
+
+# pnpm 10+ 安全设置 (允许特定包运行 install/postinstall 脚本)
 minimumReleaseAge: 0
 allowBuilds:
   esbuild: true
